@@ -1,0 +1,74 @@
+{
+  "project_info": {
+    "project_name": "",
+    "source_database_type": "",
+    "start_date": "",
+    "current_phase": 0,
+    "overall_status": "not_started"
+  },
+  "phases": [
+    {
+      "phase_number": 1,
+      "phase_name": "Requirements Gathering",
+      "status": "not_started",
+      "started_date": "",
+      "completed_date": "",
+      "key_findings": [],
+      "artifacts_created": [],
+      "notes": ""
+    },
+    {
+      "phase_number": 2,
+      "phase_name": "Information Gathering",
+      "status": "not_started",
+      "started_date": "",
+      "completed_date": "",
+      "key_findings": [],
+      "artifacts_created": [],
+      "notes": ""
+    },
+    {
+      "phase_number": 3,
+      "phase_name": "Database Documentation",
+      "status": "not_started",
+      "started_date": "",
+      "completed_date": "",
+      "key_findings": [],
+      "artifacts_created": [],
+      "notes": ""
+    },
+    {
+      "phase_number": 4,
+      "phase_name": "Migration Planning",
+      "status": "not_started",
+      "started_date": "",
+      "completed_date": "",
+      "key_findings": [],
+      "artifacts_created": [],
+      "notes": ""
+    },
+    {
+      "phase_number": 5,
+      "phase_name": "Migration Implementation",
+      "status": "not_started",
+      "started_date": "",
+      "completed_date": "",
+      "key_findings": [],
+      "artifacts_created": [],
+      "notes": ""
+    },
+    {
+      "phase_number": 6,
+      "phase_name": "Review and Test",
+      "status": "not_started",
+      "started_date": "",
+      "completed_date": "",
+      "key_findings": [],
+      "artifacts_created": [],
+      "notes": ""
+    }
+  ],
+  "data_feeds": [],
+  "risks": [],
+  "iterations": []
+}

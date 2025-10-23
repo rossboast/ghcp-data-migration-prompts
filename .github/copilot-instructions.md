@@ -1,3 +1,79 @@
-# Style and tone
+# Database Migration Project - Copilot Instructions
+
+## Style and tone
 Use plain, concise language.
-Don't always assume that the job is finished, validate the job if you can. 
+Don't always assume that the job is finished, validate the job if you can.
+
+## Project Overview
+
+This workspace contains a framework for orchestrating database migrations to Azure CosmosDB using GitHub Copilot prompts.
+
+## Key Prompts
+
+### Orchestrator
+- **File**: `.github/prompts/DBMigration-Orchestrator.prompt.md`
+- **Purpose**: Main orchestrator that guides users through all migration phases
+
+### Phase Prompts
+1. **Requirements Gathering**: `.github/prompts/DBMigration-Phase1-RequirementsGathering.prompt.md`
+2. **Information Gathering**: `.github/prompts/DBMigration-Phase2-InformationGathering.prompt.md`
+3. **Database Documentation**: `.github/prompts/DBMigration-Phase3-DatabaseDocumentation.prompt.md`
+4. **Migration Planning**: `.github/prompts/DBMigration-Phase4-MigrationPlanning.prompt.md`
+5. **Migration Implementation**: `.github/prompts/DBMigration-Phase5-MigrationImplementation.prompt.md`
+6. **Review and Test**: `.github/prompts/DBMigration-Phase6-ReviewAndTest.prompt.md`
+
+## Key Files
+
+During a migration project, users will create these key files:
+
+### Status Tracking
+- **File**: `migration-status.json`
+- **Purpose**: Tracks progress through phases, key findings, and artifacts
+- **Processing Notes**: This is the central tracking file. Always check this to understand project state.
+
+### Requirements (Phase 1)
+- **File**: `0.Delivery/1.Requirements/requirements.md`
+- **Purpose**: High-level requirements for the migration
+- **Processing Notes**: <!-- User: Add specific business context -->
+
+### Information Gathering (Phase 2)
+- **File**: `0.Delivery/2.Information_Gathering/inventory.md`
+- **Purpose**: Inventory of all gathered assets
+- **Processing Notes**: <!-- User: Add any special considerations for reading source files -->
+
+### Database Documentation (Phase 3)
+- **File**: `0.Delivery/3.Database_Documentation/overview.md`
+- **Purpose**: High-level overview of source database
+- **Processing Notes**: <!-- User: Add business context for the database -->
+
+### Migration Plan (Phase 4)
+- **File**: `0.Delivery/4.Migration_Plan/migration-strategy.md`
+- **Purpose**: Selected migration approach and strategy
+- **Processing Notes**: <!-- User: Note any deviations from standard approach -->
+
+### Migration Implementation (Phase 5)
+- **Folder**: `0.Delivery/5.Migration_Implementation/pyspark-migration/`
+- **Purpose**: All PySpark migration code
+- **Processing Notes**: <!-- User: Add environment-specific notes -->
+
+### Review and Test (Phase 6)
+- **Folder**: `0.Delivery/6.Review_and_Test/`
+- **Purpose**: All test results and sign-offs
+- **Processing Notes**: <!-- User: Add any test-specific context -->
+
+## Working with These Prompts
+
+When a user wants to work on a migration project:
+
+1. **Starting**: Invoke the orchestrator prompt
+2. **Phase Work**: The orchestrator will guide through phases sequentially
+3. **Status**: Always check `migration-status.json` for current state
+4. **Iteration**: Support looping back to previous phases when needed
+
+## User-Specific Files
+
+As users gather source database information, they will add files to `0.Delivery/2.Information_Gathering/`.
+When they add key files, update this section with:
+- File path
+- Purpose
+- Any processing notes specific to that file 
