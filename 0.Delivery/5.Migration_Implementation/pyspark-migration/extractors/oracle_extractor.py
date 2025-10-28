@@ -23,6 +23,7 @@ from pyspark.sql import DataFrame
 from pyspark.sql.types import StructType
 
 from extractors.base_extractor import BaseExtractor
+from extractors.jdbc_repository import IJdbcRepository, SparkJdbcRepository, JdbcConnection
 from config.connections import OracleConnectionConfig
 from config.schema_definitions import OracleSchemas
 from utils.spark_session import SparkSessionFactory
@@ -42,6 +43,7 @@ class OracleExtractor(BaseExtractor):
     - Table-specific extraction methods
     - Batch extraction support
     - Query pushdown for filtering
+    - Dependency injection for easy testing
     """
     
     # Available tables in Oracle HR schema
@@ -59,15 +61,17 @@ class OracleExtractor(BaseExtractor):
         self,
         config: OracleConnectionConfig,
         logger: Optional[Any] = None,
-        metrics: Optional[MetricsCollector] = None
+        metrics: Optional[MetricsCollector] = None,
+        repository: Optional[IJdbcRepository] = None
     ):
         """
-        Initialize Oracle extractor.
+        Initialize Oracle extractor with dependency injection.
         
         Args:
             config: Oracle connection configuration
             logger: Optional logger instance (will create if not provided)
             metrics: Optional metrics collector (will create if not provided)
+            repository: Optional JDBC repository (enables easy mocking in tests)
         """
         # Get SparkSession first (needed by BaseExtractor)
         self.spark = SparkSessionFactory.get_session()
@@ -82,17 +86,32 @@ class OracleExtractor(BaseExtractor):
         self.config: OracleConnectionConfig = config
         self.schemas = OracleSchemas()
         
+        # Use injected repository or create default
+        self.repository = repository or SparkJdbcRepository(self.spark)
+        
         # Override logger if provided
         if logger:
             self.logger = logger
         
-        # JDBC connection properties
+        # Create JDBC connection details
+        self.connection = JdbcConnection(
+            url=self.config.jdbc_url,
+            user=self.config.username,
+            password=self.config.password,
+            driver="oracle.jdbc.driver.OracleDriver",
+            properties={
+                "fetchsize": "10000",
+                "oracle.jdbc.timezoneAsRegion": "false"
+            }
+        )
+        
+        # Keep old jdbc_properties for backwards compatibility
         self.jdbc_properties = {
             "user": self.config.username,
             "password": self.config.password,
             "driver": "oracle.jdbc.driver.OracleDriver",
-            "fetchsize": "10000",  # Fetch 10k rows at a time
-            "oracle.jdbc.timezoneAsRegion": "false",  # Handle timezone properly
+            "fetchsize": "10000",
+            "oracle.jdbc.timezoneAsRegion": "false",
         }
         
         self.logger.info(
@@ -124,14 +143,10 @@ class OracleExtractor(BaseExtractor):
         self.logger.info("Validating Oracle connection")
         
         try:
-            # Try a simple query
+            # Try a simple query using repository
             test_query = "(SELECT 1 FROM DUAL) test_table"
             
-            test_df = self.spark.read.jdbc(
-                url=self.config.jdbc_url,
-                table=test_query,
-                properties=self.jdbc_properties
-            )
+            test_df = self.repository.execute_query(test_query, self.connection)
             
             # Execute the query
             count = test_df.count()
@@ -197,12 +212,8 @@ class OracleExtractor(BaseExtractor):
         )
         
         try:
-            # Read from JDBC
-            df = self.spark.read.jdbc(
-                url=self.config.jdbc_url,
-                table=query,
-                properties=self.jdbc_properties
-            )
+            # Read using repository
+            df = self.repository.execute_query(query, self.connection)
             
             # Count records
             record_count = df.count()
@@ -354,11 +365,8 @@ class OracleExtractor(BaseExtractor):
         query += ") count_query"
         
         try:
-            count_df = self.spark.read.jdbc(
-                url=self.config.jdbc_url,
-                table=query,
-                properties=self.jdbc_properties
-            )
+            # Use repository instead of direct spark.read.jdbc
+            count_df = self.repository.execute_query(query, self.connection)
             
             count = count_df.collect()[0]["cnt"]
             

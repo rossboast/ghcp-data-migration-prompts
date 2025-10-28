@@ -30,6 +30,7 @@ from pyspark.sql.functions import col, lit
 import time
 
 from loaders.base_loader import BaseLoader, LoadResult
+from loaders.cosmos_repository import ICosmosRepository, SparkCosmosRepository, CosmosConnection
 from config.connections import CosmosDBConnectionConfig
 from utils.spark_session import SparkSessionFactory
 from utils.logging_config import get_logger
@@ -47,6 +48,7 @@ class CosmosLoader(BaseLoader):
     - RU consumption tracking
     - Upsert mode (overwrite existing documents)
     - Schema validation
+    - Dependency injection for easy testing
     """
     
     def __init__(
@@ -56,10 +58,11 @@ class CosmosLoader(BaseLoader):
         batch_size: int = 1000,
         write_mode: str = "append",
         logger: Optional[Any] = None,
-        metrics: Optional[MetricsCollector] = None
+        metrics: Optional[MetricsCollector] = None,
+        repository: Optional[ICosmosRepository] = None
     ):
         """
-        Initialize Cosmos DB loader.
+        Initialize Cosmos DB loader with dependency injection.
         
         Args:
             config: Cosmos DB connection configuration
@@ -68,6 +71,7 @@ class CosmosLoader(BaseLoader):
             write_mode: Write mode - "append" or "overwrite" (default: "append")
             logger: Optional logger instance
             metrics: Optional metrics collector
+            repository: Optional Cosmos repository (enables easy mocking in tests)
         """
         # Get SparkSession first (needed by BaseLoader)
         self.spark = SparkSessionFactory.get_session()
@@ -84,11 +88,22 @@ class CosmosLoader(BaseLoader):
         self.write_mode = write_mode
         self.batch_size = batch_size
         
+        # Use injected repository or create default
+        self.repository = repository or SparkCosmosRepository(self.spark)
+        
         # Override logger if provided
         if logger:
             self.logger = logger
         
-        # Cosmos write configuration
+        # Create Cosmos connection details
+        self.connection = CosmosConnection(
+            endpoint=self.config.endpoint,
+            key=self.config.key,
+            database=self.config.database_name,
+            container=self.container
+        )
+        
+        # Keep old cosmos_config for backwards compatibility
         self.cosmos_config = {
             "spark.cosmos.accountEndpoint": self.config.endpoint,
             "spark.cosmos.accountKey": self.config.key,
@@ -122,20 +137,15 @@ class CosmosLoader(BaseLoader):
         self.logger.info("Validating Cosmos DB connection")
         
         try:
-            # Try to read from container (will fail if container doesn't exist)
-            test_df = (self.spark.read
-                      .format("cosmos.oltp")
-                      .options(**self.cosmos_config)
-                      .option("spark.cosmos.read.inferSchema.enabled", "false")
-                      .load())
+            # Use repository to check container existence
+            exists = self.repository.container_exists(self.connection)
             
-            # Just check if we can access the container (don't load data)
-            schema = test_df.schema
+            if not exists:
+                raise LoadError(f"Container '{self.container}' does not exist")
             
             self.logger.info(
                 "Cosmos DB connection validated",
-                container=self.container,
-                schema_fields=len(schema.fields)
+                container=self.container
             )
             
             return True
@@ -235,32 +245,35 @@ class CosmosLoader(BaseLoader):
         start_time = time.time()
         
         try:
-            # Write to Cosmos DB using Spark connector
-            batch_df.write.format("cosmos.oltp") \
-                .options(**self.cosmos_config) \
-                .mode(self.write_mode) \
-                .save()
+            # Write using repository instead of direct Spark connector
+            mode_str = "upsert" if self.write_mode == "overwrite" else self.write_mode
+            records_written = self.repository.write_dataframe(
+                df=batch_df,
+                connection=self.connection,
+                mode=mode_str,
+                enable_bulk=True
+            )
             
             duration = time.time() - start_time
             
             self.logger.info(
                 "Batch loaded successfully",
                 batch_number=batch_number,
-                records=batch_size,
+                records=records_written,
                 duration_seconds=round(duration, 2),
-                records_per_second=round(batch_size / duration, 2) if duration > 0 else 0
+                records_per_second=round(records_written / duration, 2) if duration > 0 else 0
             )
             
             # Track RU consumption (approximate) - use custom_metrics dict
             # Cosmos DB charges ~5-10 RUs per 1KB document
             # Assume average 2KB per document = 10 RUs
-            estimated_rus = batch_size * 10
+            estimated_rus = records_written * 10
             if not hasattr(self.metrics, 'custom_metrics'):
                 self.metrics.custom_metrics = {}
             self.metrics.custom_metrics["request_units_consumed"] = \
                 self.metrics.custom_metrics.get("request_units_consumed", 0) + estimated_rus
             
-            return batch_size
+            return records_written
             
         except Exception as e:
             self.logger.error(
@@ -398,11 +411,8 @@ class CosmosLoader(BaseLoader):
         self.logger.info("Retrieving container statistics")
         
         try:
-            # Read from container
-            df = (self.spark.read
-                 .format("cosmos.oltp")
-                 .options(**self.cosmos_config)
-                 .load())
+            # Read from container using repository
+            df = self.repository.read_container(self.connection)
             
             record_count = df.count()
             
@@ -457,10 +467,7 @@ class CosmosLoader(BaseLoader):
         
         try:
             # Read all records
-            df = (self.spark.read
-                 .format("cosmos.oltp")
-                 .options(**self.cosmos_config)
-                 .load())
+            df = self.repository.read_container(self.connection)
             
             count_before = df.count()
             
@@ -468,11 +475,12 @@ class CosmosLoader(BaseLoader):
             empty_df = self.spark.createDataFrame([], df.schema)
             
             # Write with overwrite mode (this clears the container)
-            (empty_df.write
-             .format("cosmos.oltp")
-             .options(**self.cosmos_config)
-             .mode("overwrite")
-             .save())
+            self.repository.write_dataframe(
+                df=empty_df,
+                connection=self.connection,
+                mode="overwrite",
+                enable_bulk=True
+            )
             
             self.logger.warning(
                 "All records deleted",
