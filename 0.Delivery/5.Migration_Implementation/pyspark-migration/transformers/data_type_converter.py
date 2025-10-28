@@ -50,6 +50,64 @@ class DataTypeConverter:
     ISO_DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'"
     ISO_DATETIME_TZ_FORMAT = "yyyy-MM-dd'T'HH:mm:ssXXX"
     
+    # ========== Helper methods for single value conversions ==========
+    
+    @staticmethod
+    def convert_date_to_iso_string(value) -> Optional[str]:
+        """
+        Convert a single Python date object to ISO 8601 string.
+        
+        Args:
+            value: Python date object or None
+            
+        Returns:
+            ISO date string (YYYY-MM-DD) or None
+        """
+        if value is None:
+            return None
+        from datetime import date
+        if isinstance(value, date):
+            return value.strftime("%Y-%m-%d")
+        return str(value)
+    
+    @staticmethod
+    def convert_timestamp_to_iso_string(value) -> Optional[str]:
+        """
+        Convert a single Python datetime object to ISO 8601 string.
+        
+        Args:
+            value: Python datetime object or None
+            
+        Returns:
+            ISO datetime string (YYYY-MM-DDTHH:MM:SS) or None
+        """
+        if value is None:
+            return None
+        from datetime import datetime
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%dT%H:%M:%S")
+        return str(value)
+    
+    @staticmethod
+    def convert_decimal_to_number(value) -> Optional[float]:
+        """
+        Convert a Decimal to float.
+        
+        Args:
+            value: Decimal object or None
+            
+        Returns:
+            Float value or None
+        """
+        if value is None:
+            return None
+        from decimal import Decimal
+        if isinstance(value, Decimal):
+            return float(value)
+        return float(value)
+    
+    # ========== DataFrame transformation methods ==========
+    
     @staticmethod
     def convert_dates_to_iso(
         df: DataFrame,

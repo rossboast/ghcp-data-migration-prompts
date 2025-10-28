@@ -40,8 +40,7 @@ from transformers.base_transformer import BaseTransformer
 from transformers.data_type_converter import DataTypeConverter
 from transformers.common_transformations import CommonTransformations
 from utils.logging_config import get_logger
-from utils.metrics import MetricsCollector
-
+from utils.metrics import MetricsCollector, MigrationMetrics
 
 class EmployeeTransformer(BaseTransformer):
     """
@@ -78,7 +77,7 @@ class EmployeeTransformer(BaseTransformer):
         super().__init__(
             name="employee_transformer",
             logger=logger or get_logger("employee_transformer"),
-            metrics=metrics or MetricsCollector("employee_transformer")
+            metrics=metrics or MigrationMetrics(feed_name="employee_transformer")
         )
         
         self.partition_key_formula = partition_key_formula

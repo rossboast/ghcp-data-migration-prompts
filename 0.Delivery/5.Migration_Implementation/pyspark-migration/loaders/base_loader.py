@@ -10,16 +10,57 @@ and implement the required abstract methods.
 
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, List
+from dataclasses import dataclass, field
+from datetime import datetime
 from pyspark.sql import DataFrame, SparkSession
 
-from utils import (
-    get_logger, 
-    MigrationMetrics, 
-    Timer, 
-    ErrorContext, 
-    LoadError,
-    retry
-)
+from utils.logging_config import get_logger
+from utils.metrics import MigrationMetrics, Timer
+from utils.error_handler import ErrorContext, LoadError, retry
+
+
+@dataclass
+class LoadResult:
+    """
+    Result of a load operation.
+    
+    Attributes:
+        records_loaded: Number of records successfully loaded
+        records_failed: Number of records that failed to load
+        load_time_seconds: Time taken to load in seconds
+        target_table: Name of the target table/container
+        errors: List of error messages encountered
+        metadata: Additional metadata about the load operation
+    """
+    records_loaded: int = 0
+    records_failed: int = 0
+    load_time_seconds: float = 0.0
+    target_table: str = ""
+    errors: List[str] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=datetime.now)
+    
+    @property
+    def success_rate(self) -> float:
+        """Calculate success rate as a percentage."""
+        total = self.records_loaded + self.records_failed
+        if total == 0:
+            return 0.0
+        return (self.records_loaded / total) * 100.0
+    
+    @property
+    def total_records(self) -> int:
+        """Total number of records processed."""
+        return self.records_loaded + self.records_failed
+    
+    def __str__(self) -> str:
+        """String representation of load result."""
+        return (
+            f"LoadResult(loaded={self.records_loaded}, "
+            f"failed={self.records_failed}, "
+            f"time={self.load_time_seconds:.2f}s, "
+            f"success_rate={self.success_rate:.1f}%)"
+        )
 
 
 class BaseLoader(ABC):
@@ -178,15 +219,22 @@ class BaseLoader(ABC):
             except Exception as e:
                 self.metrics.load_errors += 1
                 self.metrics.records_failed += input_count
-                self.logger.error(
-                    "Load failed",
-                    target_table=target_table,
-                    error=str(e),
-                    duration_seconds=timer.elapsed_seconds
-                )
-                raise LoadError(
-                    f"Failed to load to {target_table}: {str(e)}"
-                ) from e
+                # Extract just the message to avoid circular reference in JSON logging
+                if isinstance(e, LoadError):
+                    error_msg = e.args[0] if e.args else "Unknown error"
+                    # Re-raise as-is to avoid wrapping
+                    raise
+                else:
+                    error_msg = str(e)
+                    self.logger.error(
+                        "Load failed",
+                        target_table=target_table,
+                        error=error_msg,
+                        duration_seconds=timer.elapsed_seconds
+                    )
+                    raise LoadError(
+                        f"Failed to load to {target_table}: {error_msg}"
+                    ) from e
     
     def load_multiple(
         self,

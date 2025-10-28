@@ -32,7 +32,7 @@ from dotenv import load_dotenv
 from extractors.oracle_extractor import OracleExtractor
 from loaders.cosmos_loader import CosmosLoader
 from config.connections import get_oracle_config, get_cosmos_config, OracleConnectionConfig
-from utils.spark_session import SparkSessionManager
+from utils.spark_session import SparkSessionFactory
 
 # Import Docker Oracle manager
 try:
@@ -68,9 +68,9 @@ def skip_if_disabled():
 @pytest.fixture(scope="session")
 def spark_session(skip_if_disabled):
     """Create Spark session for integration tests."""
-    spark = SparkSessionManager.get_session()
+    spark = SparkSessionFactory.get_session()
     yield spark
-    # Cleanup handled by SparkSessionManager
+    # Cleanup handled by SparkSessionFactory
 
 
 @pytest.fixture(scope="session")
@@ -152,8 +152,8 @@ def oracle_config(skip_if_disabled, request):
             return OracleConnectionConfig(
                 host=conn_details["host"],
                 port=conn_details["port"],
-                service=conn_details["service_name"],
-                user=conn_details["username"],
+                service_name=conn_details["service_name"],
+                username=conn_details["username"],
                 password=conn_details["password"]
             )
         except Exception as e:

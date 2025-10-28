@@ -25,9 +25,9 @@ from pyspark.sql.types import StructType
 from extractors.base_extractor import BaseExtractor
 from config.connections import OracleConnectionConfig
 from config.schema_definitions import OracleSchemas
-from utils.spark_session import SparkSessionManager
+from utils.spark_session import SparkSessionFactory
 from utils.logging_config import get_logger
-from utils.metrics import MetricsCollector
+from utils.metrics import MetricsCollector, MigrationMetrics
 from utils.error_handler import ExtractionError, retry
 
 
@@ -69,20 +69,26 @@ class OracleExtractor(BaseExtractor):
             logger: Optional logger instance (will create if not provided)
             metrics: Optional metrics collector (will create if not provided)
         """
+        # Get SparkSession first (needed by BaseExtractor)
+        self.spark = SparkSessionFactory.get_session()
+        
+        # Initialize base class with correct parameters
         super().__init__(
-            name="oracle_extractor",
-            config=config,
-            logger=logger or get_logger("oracle_extractor"),
-            metrics=metrics or MetricsCollector("oracle_extractor")
+            spark=self.spark,
+            source_name="oracle_extractor",
+            metrics=metrics or MigrationMetrics(feed_name="oracle_extractor")
         )
         
         self.config: OracleConnectionConfig = config
-        self.spark = SparkSessionManager.get_session()
         self.schemas = OracleSchemas()
+        
+        # Override logger if provided
+        if logger:
+            self.logger = logger
         
         # JDBC connection properties
         self.jdbc_properties = {
-            "user": self.config.user,
+            "user": self.config.username,
             "password": self.config.password,
             "driver": "oracle.jdbc.driver.OracleDriver",
             "fetchsize": "10000",  # Fetch 10k rows at a time
@@ -94,6 +100,16 @@ class OracleExtractor(BaseExtractor):
             jdbc_url=self.config.jdbc_url,
             available_tables=len(self.AVAILABLE_TABLES)
         )
+    
+    @property
+    def jdbc_url(self) -> str:
+        """
+        Get the JDBC URL for Oracle connection.
+        
+        Returns:
+            JDBC URL string
+        """
+        return self.config.jdbc_url
     
     def validate_connection(self) -> bool:
         """
@@ -122,8 +138,7 @@ class OracleExtractor(BaseExtractor):
             
             if count != 1:
                 raise ExtractionError(
-                    f"Connection test failed: expected 1 row, got {count}",
-                    context={"jdbc_url": self.config.jdbc_url}
+                    f"Connection test failed: expected 1 row, got {count}"
                 )
             
             self.logger.info("Oracle connection validated successfully")
@@ -136,8 +151,7 @@ class OracleExtractor(BaseExtractor):
                 jdbc_url=self.config.jdbc_url
             )
             raise ExtractionError(
-                f"Failed to connect to Oracle: {str(e)}",
-                context={"jdbc_url": self.config.jdbc_url}
+                f"Failed to connect to Oracle: {str(e)}"
             ) from e
     
     def extract(
@@ -165,8 +179,7 @@ class OracleExtractor(BaseExtractor):
         # Validate table name
         if table_name.lower() not in [t.lower() for t in self.AVAILABLE_TABLES]:
             raise ExtractionError(
-                f"Table '{table_name}' not in available tables",
-                context={"available_tables": self.AVAILABLE_TABLES}
+                f"Table '{table_name}' not in available tables: {self.AVAILABLE_TABLES}"
             )
         
         # Get schema for the table
@@ -184,12 +197,8 @@ class OracleExtractor(BaseExtractor):
         )
         
         try:
-            # Read from JDBC with schema
+            # Read from JDBC
             df = self.spark.read.jdbc(
-                url=self.config.jdbc_url,
-                table=query,
-                properties=self.jdbc_properties
-            ).schema(schema) if schema else self.spark.read.jdbc(
                 url=self.config.jdbc_url,
                 table=query,
                 properties=self.jdbc_properties
@@ -213,13 +222,8 @@ class OracleExtractor(BaseExtractor):
                 error=str(e)
             )
             raise ExtractionError(
-                f"Failed to extract from {table_name}: {str(e)}",
-                context={
-                    "table": table_name,
-                    "query": query,
-                    "jdbc_url": self.config.jdbc_url
-                }
-            ) from e
+                f"Failed to extract from {table_name}: {str(e)}"
+            )
     
     def extract_all_tables(
         self,
@@ -265,8 +269,7 @@ class OracleExtractor(BaseExtractor):
                 )
                 # Re-raise with context
                 raise ExtractionError(
-                    f"Failed to extract table {table}",
-                    context={"table": table, "completed": list(results.keys())}
+                    f"Failed to extract table {table} (completed: {list(results.keys())})"
                 ) from e
         
         self.logger.info(
@@ -375,8 +378,7 @@ class OracleExtractor(BaseExtractor):
                 error=str(e)
             )
             raise ExtractionError(
-                f"Failed to count rows in {table_name}: {str(e)}",
-                context={"table": table_name, "where": where_clause}
+                f"Failed to count rows in {table_name}: {str(e)}"
             ) from e
     
     def get_all_table_counts(self) -> Dict[str, int]:
@@ -421,13 +423,13 @@ class OracleExtractor(BaseExtractor):
             StructType schema or None if not found
         """
         schema_map = {
-            "regions": self.schemas.regions,
-            "countries": self.schemas.countries,
-            "locations": self.schemas.locations,
-            "departments": self.schemas.departments,
-            "jobs": self.schemas.jobs,
-            "employees": self.schemas.employees,
-            "job_history": self.schemas.job_history
+            "regions": self.schemas.REGIONS,
+            "countries": self.schemas.COUNTRIES,
+            "locations": self.schemas.LOCATIONS,
+            "departments": self.schemas.DEPARTMENTS,
+            "jobs": self.schemas.JOBS,
+            "employees": self.schemas.EMPLOYEES,
+            "job_history": self.schemas.JOB_HISTORY
         }
         
         return schema_map.get(table_name.lower())

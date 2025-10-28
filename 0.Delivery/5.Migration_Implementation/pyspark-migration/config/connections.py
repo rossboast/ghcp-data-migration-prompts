@@ -318,6 +318,29 @@ SPARK_MASTER=local[*]
 """
 
 
+# Convenience functions for easy imports
+def get_oracle_config() -> OracleConnectionConfig:
+    """
+    Get Oracle connection configuration from environment variables.
+    Convenience wrapper for ConnectionManager.get_oracle_config().
+    
+    Returns:
+        OracleConnectionConfig instance
+    """
+    return ConnectionManager.get_oracle_config()
+
+
+def get_cosmos_config() -> CosmosDBConnectionConfig:
+    """
+    Get Cosmos DB connection configuration from environment variables.
+    Convenience wrapper for ConnectionManager.get_cosmos_config().
+    
+    Returns:
+        CosmosDBConnectionConfig instance
+    """
+    return ConnectionManager.get_cosmos_config()
+
+
 if __name__ == "__main__":
     # Example: Print template .env file
     print("Example .env file configuration:")

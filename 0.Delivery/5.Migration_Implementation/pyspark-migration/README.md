@@ -16,29 +16,45 @@ Production-grade framework for migrating Oracle HR database to Azure Cosmos DB u
 
 ### Prerequisites
 
-- Python 3.9+
-- Java 8 or 11 (for PySpark)
+- **Python 3.9-3.12** (3.11 recommended)
+- **Java 8 or 11** (for PySpark)
+- **Conda/Miniconda** (recommended for Windows)
 - Oracle JDBC driver (ojdbc8.jar)
 - Azure Cosmos DB account
 
 ### Installation
 
-```bash
-# Clone repository
-git clone <repository-url>
-cd pyspark-migration
+#### Option 1: Conda (Recommended for Windows)
 
-# Create virtual environment
+```powershell
+# Create conda environment
+conda env create -f environment.yml
+
+# Activate environment
+conda activate pyspark-migration
+
+# Configure environment
+Copy-Item .env.example .env
+# Edit .env with your credentials
+```
+
+See [CONDA_SETUP.md](CONDA_SETUP.md) for detailed instructions.
+
+#### Option 2: pip with venv
+
+```bash
+# Requires Python 3.9-3.12 (NOT 3.13)
 python -m venv venv
 source venv/bin/activate  # On Windows: .\venv\Scripts\Activate.ps1
 
-# Install dependencies
 pip install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
 # Edit .env with your credentials
 ```
+
+**Note:** On Windows with Python 3.13, use conda to avoid compilation issues.
 
 ### Basic Usage
 

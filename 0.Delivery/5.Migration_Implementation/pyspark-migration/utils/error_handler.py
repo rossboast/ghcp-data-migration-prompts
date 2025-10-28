@@ -148,13 +148,18 @@ class ErrorContext:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit the context, logging any errors."""
         if exc_type is not None:
+            # Don't include exc_info for already-wrapped exceptions (LoadError, etc)
+            # to avoid JSON serialization of circular __traceback__ references
+            from .error_handler import LoadError
+            include_exc_info = not isinstance(exc_val, LoadError)
+            
             self.logger.error(
                 f"Error in {self.operation}: {exc_val}",
                 operation=self.operation,
                 error_type=exc_type.__name__,
                 error=str(exc_val),
                 **self.context,
-                exc_info=True
+                exc_info=include_exc_info
             )
         else:
             self.logger.debug(f"Completed {self.operation}", **self.context)

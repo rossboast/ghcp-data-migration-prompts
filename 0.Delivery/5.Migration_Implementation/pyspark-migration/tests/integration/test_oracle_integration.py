@@ -11,7 +11,7 @@ Run: pytest tests/integration/test_oracle_integration.py -v -m oracle
 """
 
 import pytest
-from .conftest import EXPECTED_COUNTS, EXPECTED_REGION_NAMES, EXPECTED_EMPLOYEE_COLUMNS
+from tests.integration.conftest import EXPECTED_COUNTS, EXPECTED_REGION_NAMES, EXPECTED_EMPLOYEE_COLUMNS
 
 
 @pytest.mark.integration

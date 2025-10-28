@@ -17,6 +17,14 @@ from azure.cosmos.exceptions import CosmosHttpResponseError
 from loaders.cosmos_loader import CosmosLoader
 from config.connections import CosmosDBConnectionConfig
 from utils.error_handler import LoadError
+from utils.logging_config import configure_logging
+
+
+# Configure logging for tests - use ConsoleRenderer to avoid JSON serialization issues
+@pytest.fixture(scope="module", autouse=True)
+def configure_test_logging():
+    """Configure logging for test environment - disable JSON rendering to avoid circular reference issues."""
+    configure_logging(log_level="INFO", log_to_file=False)
 
 
 @pytest.fixture
@@ -25,7 +33,7 @@ def mock_cosmos_config():
     return CosmosDBConnectionConfig(
         endpoint="https://test-account.documents.azure.com:443/",
         key="test_key_12345678901234567890",
-        database="test_db"
+        database_name="test_db"
     )
 
 
@@ -74,13 +82,18 @@ def mock_dataframe():
     # Mock repartition
     mock_df.repartition.return_value = mock_df
     
+    # Remove limit/subtract to trigger mock branch in load()
+    # This makes hasattr(df, 'limit') return False
+    del mock_df.limit
+    del mock_df.subtract
+    
     return mock_df
 
 
 class TestCosmosLoaderInitialization:
     """Test CosmosLoader initialization."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_initialization_success(self, mock_get_session, mock_cosmos_config, mock_spark_session):
         """Test successful loader initialization."""
         mock_get_session.return_value = mock_spark_session
@@ -93,7 +106,7 @@ class TestCosmosLoaderInitialization:
         assert loader.batch_size == 1000
         assert loader.spark == mock_spark_session
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_initialization_with_custom_batch_size(self, mock_get_session, mock_cosmos_config, mock_spark_session):
         """Test initialization with custom batch size."""
         mock_get_session.return_value = mock_spark_session
@@ -102,7 +115,7 @@ class TestCosmosLoaderInitialization:
         
         assert loader.batch_size == 500
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_initialization_with_upsert_mode(self, mock_get_session, mock_cosmos_config, mock_spark_session):
         """Test initialization with upsert write mode."""
         mock_get_session.return_value = mock_spark_session
@@ -119,7 +132,7 @@ class TestCosmosLoaderInitialization:
 class TestCosmosLoaderValidation:
     """Test validation methods."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_validate_dataframe_with_required_columns(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test DataFrame validation with required columns."""
         mock_get_session.return_value = mock_spark_session
@@ -133,7 +146,7 @@ class TestCosmosLoaderValidation:
         result = loader._validate_dataframe(mock_dataframe)
         assert result is True
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_validate_dataframe_missing_id(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test DataFrame validation with missing 'id' column."""
         mock_get_session.return_value = mock_spark_session
@@ -148,7 +161,7 @@ class TestCosmosLoaderValidation:
         
         assert "id" in str(exc_info.value).lower()
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_validate_dataframe_missing_partition_key(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test DataFrame validation with missing 'partitionKey' column."""
         mock_get_session.return_value = mock_spark_session
@@ -167,7 +180,7 @@ class TestCosmosLoaderValidation:
 class TestCosmosLoaderLoadOperations:
     """Test load operations."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_load_success(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test successful data load."""
         mock_get_session.return_value = mock_spark_session
@@ -182,7 +195,7 @@ class TestCosmosLoaderLoadOperations:
         mock_dataframe.write.format.assert_called_once()
         assert mock_dataframe.write.format.call_args[0][0] == "cosmos.oltp"
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_load_with_append_mode(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test load with append mode."""
         mock_get_session.return_value = mock_spark_session
@@ -198,7 +211,7 @@ class TestCosmosLoaderLoadOperations:
         write_chain = mock_dataframe.write.format.return_value.options.return_value
         write_chain.mode.assert_called()
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_load_with_upsert_mode(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test load with upsert mode."""
         mock_get_session.return_value = mock_spark_session
@@ -213,7 +226,7 @@ class TestCosmosLoaderLoadOperations:
         # Verify upsert mode was used
         assert result == mock_dataframe.count.return_value
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_load_empty_dataframe(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test loading empty DataFrame."""
         mock_get_session.return_value = mock_spark_session
@@ -230,7 +243,7 @@ class TestCosmosLoaderLoadOperations:
 class TestCosmosLoaderBatchOperations:
     """Test batch loading operations."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_load_batches(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test batch loading."""
         mock_get_session.return_value = mock_spark_session
@@ -249,7 +262,7 @@ class TestCosmosLoaderBatchOperations:
         # Number of batches = ceil(2500 / 1000) = 3
         mock_dataframe.repartition.assert_called()
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_load_single_batch(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test loading single batch."""
         mock_get_session.return_value = mock_spark_session
@@ -264,7 +277,7 @@ class TestCosmosLoaderBatchOperations:
 class TestCosmosLoaderRetryLogic:
     """Test retry logic for throttling."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_retry_on_throttling(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test automatic retry on 429 throttling errors."""
         mock_get_session.return_value = mock_spark_session
@@ -294,7 +307,7 @@ class TestCosmosLoaderRetryLogic:
         # Save should have been called twice (1 failure + 1 success)
         assert mock_mode.save.call_count == 2
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_max_retries_exceeded(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test behavior when max retries exceeded."""
         mock_get_session.return_value = mock_spark_session
@@ -325,7 +338,7 @@ class TestCosmosLoaderRetryLogic:
 class TestCosmosLoaderConfiguration:
     """Test Cosmos DB configuration."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_cosmos_write_options(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test Cosmos DB write options are properly configured."""
         mock_get_session.return_value = mock_spark_session
@@ -343,7 +356,7 @@ class TestCosmosLoaderConfiguration:
         # Should include endpoint, database, container
         assert "spark.cosmos.accountEndpoint" in str(options_dict) or options_dict
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_bulk_write_enabled(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test bulk write is enabled for performance."""
         mock_get_session.return_value = mock_spark_session
@@ -363,7 +376,7 @@ class TestCosmosLoaderConfiguration:
 class TestCosmosLoaderMetrics:
     """Test metrics collection during load."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_load_with_metrics(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test load with automatic metrics collection."""
         mock_get_session.return_value = mock_spark_session
@@ -379,7 +392,7 @@ class TestCosmosLoaderMetrics:
         assert loader.metrics.records_processed == 100
         assert loader.metrics.execution_time > 0
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_metrics_track_failures(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test metrics track failed records."""
         mock_get_session.return_value = mock_spark_session
@@ -398,7 +411,7 @@ class TestCosmosLoaderMetrics:
 class TestCosmosLoaderErrorHandling:
     """Test error handling scenarios."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_load_with_invalid_endpoint(self, mock_get_session, mock_spark_session, mock_dataframe):
         """Test load with invalid Cosmos endpoint."""
         mock_get_session.return_value = mock_spark_session
@@ -406,7 +419,7 @@ class TestCosmosLoaderErrorHandling:
         invalid_config = CosmosDBConnectionConfig(
             endpoint="invalid_endpoint",
             key="test_key",
-            database="test_db"
+            database_name="test_db"
         )
         
         # Should raise error during initialization or validation
@@ -414,7 +427,7 @@ class TestCosmosLoaderErrorHandling:
             loader = CosmosLoader(invalid_config, container="test_container")
             loader.validate_target_connection()
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_load_with_connection_error(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test load with connection errors."""
         mock_get_session.return_value = mock_spark_session
@@ -434,7 +447,7 @@ class TestCosmosLoaderErrorHandling:
 class TestCosmosLoaderUpsertOperations:
     """Test upsert-specific operations."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_upsert_updates_existing_records(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test upsert mode updates existing records."""
         mock_get_session.return_value = mock_spark_session
@@ -451,7 +464,7 @@ class TestCosmosLoaderUpsertOperations:
         assert result == 50
         # In upsert mode, existing records should be updated
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_upsert_inserts_new_records(self, mock_get_session, mock_cosmos_config, mock_spark_session, mock_dataframe):
         """Test upsert mode inserts new records."""
         mock_get_session.return_value = mock_spark_session
@@ -471,7 +484,7 @@ class TestCosmosLoaderUpsertOperations:
 class TestCosmosLoaderValidation:
     """Test validation and pre-flight checks."""
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_validate_target_connection_success(self, mock_get_session, mock_cosmos_config, mock_spark_session):
         """Test successful target connection validation."""
         mock_get_session.return_value = mock_spark_session
@@ -484,7 +497,7 @@ class TestCosmosLoaderValidation:
         # Should return True or not raise error
         assert result is True or result is None
     
-    @patch('loaders.cosmos_loader.SparkSessionManager.get_session')
+    @patch('loaders.cosmos_loader.SparkSessionFactory.get_session')
     def test_validate_container_exists(self, mock_get_session, mock_cosmos_config, mock_spark_session):
         """Test container existence validation."""
         mock_get_session.return_value = mock_spark_session

@@ -1,23 +1,26 @@
 # Python dependencies for Oracle HR to CosmosDB Migration
-# Python Version: 3.9+
+# Python Version: 3.11 (recommended for compatibility with pre-built wheels)
 
 # PySpark
-pyspark==3.5.0
+pyspark==3.5.3
 
-# Azure Cosmos DB Spark Connector
-azure-cosmos-spark==4.22.0
+# Azure Cosmos DB Spark Connector (JAR - not a pip package)
+# Download from Maven: com.azure.cosmos.spark:azure-cosmos-spark_3-4_2-12:4.14.0
+# Or use --packages option when running spark-submit:
+# spark-submit --packages com.azure.cosmos.spark:azure-cosmos-spark_3-4_2-12:4.14.0
+# For PySpark 3.5.x, use: com.azure.cosmos.spark:azure-cosmos-spark_3-5_2-12:4.30.0
 
 # Oracle JDBC Driver (requires separate installation)
 # Download ojdbc8.jar from Oracle and add to Spark classpath
 
-# Azure SDK
+# Azure SDK (for direct Python API access to Cosmos DB)
 azure-cosmos==4.5.1
 azure-identity==1.15.0
 
 # Data Processing
-pandas==2.1.4
-numpy==1.26.2
-pyarrow==14.0.1
+pandas==2.2.3
+numpy==1.26.4
+pyarrow==18.1.0
 
 # Configuration Management
 python-dotenv==1.0.0

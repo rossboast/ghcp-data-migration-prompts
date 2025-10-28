@@ -24,8 +24,8 @@ def mock_oracle_config():
     return OracleConnectionConfig(
         host="localhost",
         port=1521,
-        service="XEPDB1",
-        user="hr",
+        service_name="XEPDB1",
+        username="hr",
         password="test_password"
     )
 
@@ -64,7 +64,7 @@ def mock_dataframe():
 class TestOracleExtractorInitialization:
     """Test OracleExtractor initialization."""
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_initialization_success(self, mock_get_session, mock_oracle_config, mock_spark_session):
         """Test successful extractor initialization."""
         mock_get_session.return_value = mock_spark_session
@@ -78,7 +78,7 @@ class TestOracleExtractorInitialization:
         assert "regions" in extractor.AVAILABLE_TABLES
         assert "departments" in extractor.AVAILABLE_TABLES
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_jdbc_properties_configured(self, mock_get_session, mock_oracle_config, mock_spark_session):
         """Test JDBC properties are properly configured."""
         mock_get_session.return_value = mock_spark_session
@@ -90,21 +90,21 @@ class TestOracleExtractorInitialization:
         assert extractor.jdbc_properties["driver"] == "oracle.jdbc.driver.OracleDriver"
         assert "fetchsize" in extractor.jdbc_properties
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_jdbc_url_generation(self, mock_get_session, mock_oracle_config, mock_spark_session):
         """Test JDBC URL is properly generated."""
         mock_get_session.return_value = mock_spark_session
         
         extractor = OracleExtractor(mock_oracle_config)
         
-        expected_url = "jdbc:oracle:thin:@localhost:1521/XEPDB1"
+        expected_url = "jdbc:oracle:thin:@//localhost:1521/XEPDB1"
         assert extractor.jdbc_url == expected_url
 
 
 class TestOracleExtractorConnection:
     """Test connection validation."""
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_validate_connection_success(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test successful connection validation."""
         mock_get_session.return_value = mock_spark_session
@@ -121,22 +121,24 @@ class TestOracleExtractorConnection:
         assert call_args is not None
         assert "(SELECT 1 FROM DUAL)" in call_args[1]["table"]
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_validate_connection_failure(self, mock_get_session, mock_oracle_config, mock_spark_session):
         """Test connection validation failure."""
         mock_get_session.return_value = mock_spark_session
         mock_spark_session.read.jdbc.side_effect = Exception("Connection refused")
         
         extractor = OracleExtractor(mock_oracle_config)
-        result = extractor.validate_connection()
         
-        assert result is False
+        with pytest.raises(ExtractionError) as exc_info:
+            extractor.validate_connection()
+        
+        assert "connection refused" in str(exc_info.value).lower()
 
 
 class TestOracleExtractorExtraction:
     """Test data extraction methods."""
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_table_basic(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test basic table extraction."""
         mock_get_session.return_value = mock_spark_session
@@ -152,9 +154,9 @@ class TestOracleExtractorExtraction:
         # Verify JDBC call was made with correct parameters
         call_args = mock_spark_session.read.jdbc.call_args
         assert call_args[1]["url"] == extractor.jdbc_url
-        assert "regions" in call_args[1]["table"].upper()
+        assert "REGIONS" in call_args[1]["table"].upper()
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_with_where_clause(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extraction with WHERE clause."""
         mock_get_session.return_value = mock_spark_session
@@ -170,7 +172,7 @@ class TestOracleExtractorExtraction:
         assert "WHERE manager_id IS NULL" in query
         assert df.count() == 2
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_invalid_table(self, mock_get_session, mock_oracle_config, mock_spark_session):
         """Test extraction of non-existent table."""
         mock_get_session.return_value = mock_spark_session
@@ -182,7 +184,7 @@ class TestOracleExtractorExtraction:
         
         assert "not in available tables" in str(exc_info.value).lower()
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_with_columns(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extraction with specific columns."""
         mock_get_session.return_value = mock_spark_session
@@ -202,7 +204,7 @@ class TestOracleExtractorExtraction:
 class TestOracleExtractorConvenienceMethods:
     """Test table-specific convenience methods."""
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_regions(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extract_regions convenience method."""
         mock_get_session.return_value = mock_spark_session
@@ -216,7 +218,7 @@ class TestOracleExtractorConvenienceMethods:
         call_args = mock_spark_session.read.jdbc.call_args
         assert "regions" in call_args[1]["table"].lower()
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_employees(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extract_employees convenience method."""
         mock_get_session.return_value = mock_spark_session
@@ -230,7 +232,7 @@ class TestOracleExtractorConvenienceMethods:
         call_args = mock_spark_session.read.jdbc.call_args
         assert "employees" in call_args[1]["table"].lower()
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_employees_active_only(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extract_employees with active_only filter."""
         mock_get_session.return_value = mock_spark_session
@@ -245,7 +247,7 @@ class TestOracleExtractorConvenienceMethods:
         # The actual WHERE clause depends on implementation
         assert "employees" in query.lower()
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_departments_exclude_null_managers(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extract_departments with include_null_managers=False."""
         mock_get_session.return_value = mock_spark_session
@@ -263,7 +265,7 @@ class TestOracleExtractorConvenienceMethods:
 class TestOracleExtractorBatchOperations:
     """Test batch extraction operations."""
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_all_tables(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extracting all tables at once."""
         mock_get_session.return_value = mock_spark_session
@@ -271,8 +273,9 @@ class TestOracleExtractorBatchOperations:
         
         extractor = OracleExtractor(mock_oracle_config)
         
-        # Mock different counts for different tables
-        counts = [4, 25, 23, 27, 19, 107, 10]
+        # Mock counts - validation (1) + each table counted 3 times (extract + extract_with_metrics + summary)
+        # 1 validation + 7 tables * 3 counts = 22 total
+        counts = [1] + [4, 4, 4, 25, 25, 25, 23, 23, 23, 27, 27, 27, 19, 19, 19, 107, 107, 107, 10, 10, 10]
         mock_dataframe.count.side_effect = counts
         
         tables_dict = extractor.extract_all_tables()
@@ -283,14 +286,18 @@ class TestOracleExtractorBatchOperations:
         assert "countries" in tables_dict
         assert "employees" in tables_dict
         
-        # Verify JDBC was called 7 times
-        assert mock_spark_session.read.jdbc.call_count == 7
+        # Verify JDBC was called 8 times (1 validation + 7 tables)
+        assert mock_spark_session.read.jdbc.call_count == 8
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_specific_tables_subset(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extracting specific subset of tables."""
         mock_get_session.return_value = mock_spark_session
         mock_spark_session.read.jdbc.return_value = mock_dataframe
+        
+        # Mock counts - validation (1) + each table counted 3 times (extract + extract_with_metrics + summary)
+        # 1 validation + 3 tables * 3 = 10 total
+        mock_dataframe.count.side_effect = [1, 4, 4, 4, 25, 25, 25, 19, 19, 19]
         
         extractor = OracleExtractor(mock_oracle_config)
         
@@ -308,12 +315,12 @@ class TestOracleExtractorBatchOperations:
 class TestOracleExtractorUtilities:
     """Test utility methods."""
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_get_table_count(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test getting row count for a table."""
         mock_get_session.return_value = mock_spark_session
         mock_spark_session.read.jdbc.return_value = mock_dataframe
-        mock_dataframe.count.return_value = 107
+        mock_dataframe.collect.return_value = [{"cnt": 107}]
         
         extractor = OracleExtractor(mock_oracle_config)
         count = extractor.get_table_count("employees")
@@ -325,7 +332,7 @@ class TestOracleExtractorUtilities:
         query = call_args[1]["table"]
         assert "COUNT(*)" in query.upper() or "employees" in query.lower()
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_get_all_table_counts(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test getting counts for all tables."""
         mock_get_session.return_value = mock_spark_session
@@ -342,8 +349,8 @@ class TestOracleExtractorUtilities:
             "job_history": 10
         }
         
-        # Set up side effect to return different counts
-        mock_dataframe.count.side_effect = list(expected_counts.values())
+        # Set up side effect to return different counts for each table
+        mock_dataframe.collect.side_effect = [[{"cnt": count}] for count in expected_counts.values()]
         
         extractor = OracleExtractor(mock_oracle_config)
         counts = extractor.get_all_table_counts()
@@ -357,7 +364,7 @@ class TestOracleExtractorUtilities:
 class TestOracleExtractorErrorHandling:
     """Test error handling scenarios."""
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extraction_with_jdbc_error(self, mock_get_session, mock_oracle_config, mock_spark_session):
         """Test handling of JDBC errors during extraction."""
         mock_get_session.return_value = mock_spark_session
@@ -370,7 +377,7 @@ class TestOracleExtractorErrorHandling:
         
         assert "JDBC connection failed" in str(exc_info.value)
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extraction_with_empty_result(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extraction returning empty DataFrame."""
         mock_get_session.return_value = mock_spark_session
@@ -387,7 +394,7 @@ class TestOracleExtractorErrorHandling:
 class TestOracleExtractorMetrics:
     """Test metrics collection during extraction."""
     
-    @patch('extractors.oracle_extractor.SparkSessionManager.get_session')
+    @patch('extractors.oracle_extractor.SparkSessionFactory.get_session')
     def test_extract_with_metrics(self, mock_get_session, mock_oracle_config, mock_spark_session, mock_dataframe):
         """Test extraction with automatic metrics collection."""
         mock_get_session.return_value = mock_spark_session
