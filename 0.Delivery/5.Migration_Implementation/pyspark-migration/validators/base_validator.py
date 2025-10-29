@@ -24,24 +24,33 @@ class ValidationResult:
     
     Attributes:
         is_valid: Whether validation passed
-        validation_name: Name of the validation check
+        validation_name: Name of the validation check (optional)
         total_records: Total number of records checked
         invalid_records: Number of invalid records
-        error_messages: List of error messages
+        error_messages: List of error messages (or use 'errors' alias)
         warnings: List of warning messages
         details: Additional details about the validation
+        errors: Alias for error_messages (for backward compatibility)
     """
     is_valid: bool
-    validation_name: str
     total_records: int = 0
     invalid_records: int = 0
-    error_messages: List[str] = None
+    validation_name: str = None
+    error_messages: List[Any] = None
+    errors: List[Any] = None  # Alias for error_messages
     warnings: List[str] = None
     details: Dict[str, Any] = None
     
     def __post_init__(self):
-        if self.error_messages is None:
+        # Support both 'errors' and 'error_messages'
+        if self.errors is not None and self.error_messages is None:
+            self.error_messages = self.errors
+        elif self.error_messages is not None and self.errors is None:
+            self.errors = self.error_messages
+        elif self.errors is None and self.error_messages is None:
+            self.errors = []
             self.error_messages = []
+        
         if self.warnings is None:
             self.warnings = []
         if self.details is None:

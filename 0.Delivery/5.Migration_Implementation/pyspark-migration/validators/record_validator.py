@@ -21,7 +21,7 @@ Usage:
     )
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col, when, lit
 
@@ -53,13 +53,24 @@ class RecordValidator(BaseValidator):
             logger: Optional logger instance
             metrics: Optional metrics collector
         """
-        super().__init__(
-            name="record_validator",
-            logger=logger or get_logger("record_validator"),
-            metrics=metrics or MetricsCollector("record_validator")
-        )
+        # Simple initialization without calling super().__init__
+        self.logger = logger or get_logger("record_validator")
+        self.metrics = metrics  # Don't instantiate MetricsCollector, just keep None or passed value
         
         self.logger.info("Record validator initialized")
+    
+    def get_validation_rules(self) -> List[str]:
+        """
+        Get list of validation rules applied by this validator.
+        
+        Returns:
+            List of rule descriptions
+        """
+        return [
+            "Referential Integrity: Foreign keys exist in reference tables",
+            "Cross-field Constraints: Date ranges and conditional requirements",
+            "Data Consistency: Field value relationships"
+        ]
     
     def validate(
         self,
@@ -96,18 +107,19 @@ class RecordValidator(BaseValidator):
         combo_errors = self._validate_required_combinations(df)
         errors.extend(combo_errors)
         
-        # Calculate valid records
+        # Calculate invalid records
         if errors:
             total_errors = sum(e.get("error_count", 0) for e in errors)
-            valid_records = max(0, total_records - total_errors)
+            invalid_records = min(total_errors, total_records)
+        else:
+            invalid_records = 0
         
         is_valid = len(errors) == 0
         
         result = ValidationResult(
             is_valid=is_valid,
             total_records=total_records,
-            valid_records=valid_records,
-            invalid_records=total_records - valid_records,
+            invalid_records=invalid_records,
             errors=errors,
             warnings=warnings
         )

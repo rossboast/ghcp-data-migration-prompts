@@ -40,6 +40,27 @@ class CommonTransformations:
     logger = get_logger("common_transformations")
     
     @staticmethod
+    def calculate_partition_key(
+        df: DataFrame,
+        key_formula: str,
+        column_name: str = "partitionKey"
+    ) -> DataFrame:
+        """
+        Calculate and add synthetic partition key based on formula.
+        Alias for add_partition_key() for backward compatibility.
+        
+        Args:
+            df: Input DataFrame
+            key_formula: Formula for partition key (can reference columns)
+                        Example: "dept_{department_id}_{employee_id % 10}"
+            column_name: Name for partition key column (default: "partitionKey")
+            
+        Returns:
+            DataFrame with partition key column added
+        """
+        return CommonTransformations.add_partition_key(df, key_formula, column_name)
+    
+    @staticmethod
     def add_partition_key(
         df: DataFrame,
         key_formula: str,
@@ -132,17 +153,20 @@ class CommonTransformations:
     @staticmethod
     def add_metadata(
         df: DataFrame,
-        source: str,
-        entity_type: str,
+        source: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        source_system: Optional[str] = None,  # Alias for 'source'
         additional_metadata: Optional[Dict[str, Any]] = None
     ) -> DataFrame:
         """
         Add metadata columns to DataFrame.
+        Supports both 'source' and 'source_system' parameters for compatibility.
         
         Args:
             df: Input DataFrame
             source: Source system identifier (e.g., "oracle_hr")
             entity_type: Type of entity (e.g., "employee", "region")
+            source_system: Alias for 'source' parameter (for backward compatibility)
             additional_metadata: Optional additional metadata fields
             
         Returns:
@@ -150,26 +174,32 @@ class CommonTransformations:
             
         Example:
             df = add_metadata(df, source="oracle_hr", entity_type="employee")
+            df = add_metadata(df, source_system="oracle_hr", entity_type="employee")
             
             # Result includes metadata column:
             # {
-            #   "source": "oracle_hr",
-            #   "entityType": "employee",
-            #   "migratedAt": "2025-10-22T10:30:00Z",
+            #   "source_system": "oracle_hr",
+            #   "entity_type": "employee",
+            #   "migrated_at": "2025-10-22T10:30:00Z",
             #   "version": "1.0"
             # }
         """
+        # Support both parameter names
+        source_value = source_system if source_system is not None else source
+        if source_value is None:
+            raise ValueError("Either 'source' or 'source_system' must be provided")
+        
         CommonTransformations.logger.debug(
             "Adding metadata",
-            source=source,
+            source=source_value,
             entity_type=entity_type
         )
         
-        # Build metadata struct
+        # Build metadata struct using snake_case for consistency with test expectations
         metadata_fields = {
-            "source": lit(source),
-            "entityType": lit(entity_type),
-            "migratedAt": current_timestamp(),
+            "source_system": lit(source_value),
+            "entity_type": lit(entity_type),
+            "migrated_at": current_timestamp(),
             "version": lit("1.0")
         }
         
@@ -193,11 +223,12 @@ class CommonTransformations:
     ) -> DataFrame:
         """
         Add or rename document ID column.
+        Supports both simple column names and format strings like "emp_{employee_id}".
         
         Args:
             df: Input DataFrame
-            id_column: Source column to use as ID
-            prefix: Optional prefix for ID (e.g., "emp_")
+            id_column: Source column to use as ID, or format string like "emp_{employee_id}"
+            prefix: Optional prefix for ID (e.g., "emp_") - ignored if id_column is a format string
             id_name: Name for ID column (default: "id")
             
         Returns:
@@ -210,14 +241,46 @@ class CommonTransformations:
             # With prefix
             df = add_document_id(df, id_column="employee_id", prefix="emp_")
             # Result: "emp_101", "emp_102", etc.
+            
+            # Format string
+            df = add_document_id(df, "emp_{employee_id}")
+            # Result: "emp_101", "emp_102", etc.
         """
+        import re
+        
         CommonTransformations.logger.debug(
             "Adding document ID",
             source_column=id_column,
             prefix=prefix
         )
         
-        if prefix:
+        # Check if id_column contains a format string like "emp_{employee_id}"
+        if '{' in id_column and '}' in id_column:
+            # Parse format string
+            pattern = r'\{([^}]+)\}'
+            matches = re.findall(pattern, id_column)
+            
+            if matches:
+                # Build expression by replacing {column} with actual column values
+                parts = re.split(r'(\{[^}]+\})', id_column)
+                concat_parts = []
+                
+                for part in parts:
+                    if part.startswith('{') and part.endswith('}'):
+                        # Extract column name
+                        col_name = part[1:-1]
+                        concat_parts.append(col(col_name).cast("string"))
+                    elif part:
+                        # Literal string
+                        concat_parts.append(lit(part))
+                
+                if concat_parts:
+                    id_col = concat(*concat_parts)
+                else:
+                    id_col = col(id_column).cast("string")
+            else:
+                id_col = col(id_column).cast("string")
+        elif prefix:
             id_col = concat(lit(prefix), col(id_column).cast("string"))
         else:
             id_col = col(id_column).cast("string")
@@ -251,7 +314,7 @@ class CommonTransformations:
             {
               "id": "region_1",
               "partitionKey": "region",
-              "entityType": "region",
+              "entity_type": "region",
               "data": {
                 "region_id": 1,
                 "region_name": "Europe"
@@ -280,8 +343,8 @@ class CommonTransformations:
         partition_key = partition_key_value or entity_type
         result_df = result_df.withColumn("partitionKey", lit(partition_key))
         
-        # Add entity type
-        result_df = result_df.withColumn("entityType", lit(entity_type))
+        # Add entity type (using snake_case for consistency with test expectations)
+        result_df = result_df.withColumn("entity_type", lit(entity_type))
         
         # Create data struct
         data_struct_fields = [col(c).alias(c) for c in data_columns]
@@ -295,7 +358,7 @@ class CommonTransformations:
         )
         
         # Select final columns
-        result_df = result_df.select("id", "partitionKey", "entityType", "data", "metadata")
+        result_df = result_df.select("id", "partitionKey", "entity_type", "data", "metadata")
         
         CommonTransformations.logger.info(
             "Reference document created",

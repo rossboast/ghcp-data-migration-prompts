@@ -24,7 +24,7 @@ Usage:
     )
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import (
     col, count, when, collect_list, array_contains,
@@ -61,13 +61,26 @@ class BusinessRuleValidator(BaseValidator):
             logger: Optional logger instance
             metrics: Optional metrics collector
         """
-        super().__init__(
-            name="business_rule_validator",
-            logger=logger or get_logger("business_rule_validator"),
-            metrics=metrics or MetricsCollector("business_rule_validator")
-        )
+        # Simple initialization without calling super().__init__
+        self.logger = logger or get_logger("business_rule_validator")
+        self.metrics = metrics  # Don't instantiate MetricsCollector, just keep None or passed value
         
         self.logger.info("Business rule validator initialized")
+    
+    def get_validation_rules(self) -> List[str]:
+        """
+        Get list of validation rules applied by this validator.
+        
+        Returns:
+            List of rule descriptions
+        """
+        return [
+            "Salary Range: Salary within job-specific min/max ranges",
+            "Manager Hierarchy: No circular manager references",
+            "Job History: No overlapping employment periods",
+            "Email Uniqueness: No duplicate email addresses",
+            "Department-Location: Valid department-location combinations"
+        ]
     
     def validate(
         self,
@@ -123,18 +136,19 @@ class BusinessRuleValidator(BaseValidator):
                 )
                 errors.extend(dept_loc_errors)
         
-        # Calculate valid records
+        # Calculate invalid records
         if errors:
             total_errors = sum(e.get("error_count", 0) for e in errors)
-            valid_records = max(0, total_records - total_errors)
+            invalid_records = min(total_errors, total_records)
+        else:
+            invalid_records = 0
         
         is_valid = len(errors) == 0
         
         result = ValidationResult(
             is_valid=is_valid,
             total_records=total_records,
-            valid_records=valid_records,
-            invalid_records=total_records - valid_records,
+            invalid_records=invalid_records,
             errors=errors,
             warnings=warnings
         )
@@ -230,6 +244,11 @@ class BusinessRuleValidator(BaseValidator):
         errors = []
         
         self.logger.debug("Validating manager hierarchy for circular references")
+        
+        # Skip if manager_id column doesn't exist
+        if "manager_id" not in employees_df.columns:
+            self.logger.debug("Skipping manager hierarchy validation - manager_id column not present")
+            return errors
         
         # Check for direct self-management
         self_managers = employees_df.filter(

@@ -5,6 +5,7 @@ Tests data type conversion and common transformations.
 """
 
 import pytest
+import sys
 from datetime import datetime, date
 from decimal import Decimal
 from pyspark.sql import SparkSession

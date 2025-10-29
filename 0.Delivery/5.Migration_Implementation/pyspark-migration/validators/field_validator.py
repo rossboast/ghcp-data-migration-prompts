@@ -23,7 +23,7 @@ Usage:
 """
 
 from typing import Dict, Any, List, Optional
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, when, length, regexp_extract, lit, concat
 
 from validators.base_validator import BaseValidator, ValidationResult
@@ -51,29 +51,42 @@ class FieldValidator(BaseValidator):
     def __init__(
         self,
         validation_rules: Dict[str, List[str]],
+        spark: Optional[SparkSession] = None,
         logger: Optional[Any] = None,
-        metrics: Optional[MetricsCollector] = None
+        metrics: Optional[Any] = None
     ):
         """
         Initialize field validator.
         
         Args:
             validation_rules: Dictionary mapping field names to validation rule names
+            spark: Optional SparkSession (not used, for compatibility)
             logger: Optional logger instance
             metrics: Optional metrics collector
         """
-        super().__init__(
-            name="field_validator",
-            logger=logger or get_logger("field_validator"),
-            metrics=metrics or MetricsCollector("field_validator")
-        )
-        
+        # Note: BaseValidator expects different params, but field_validator uses simpler initialization
+        # We'll just set attributes directly for now to avoid breaking changes
         self.validation_rules = validation_rules
+        self.logger = logger or get_logger("field_validator")
+        self.metrics = metrics  # Don't instantiate MetricsCollector, just keep None or passed value
         
         self.logger.info(
             "Field validator initialized",
             rules_count=len(validation_rules)
         )
+    
+    def get_validation_rules(self) -> List[str]:
+        """
+        Get list of validation rules applied by this validator.
+        
+        Returns:
+            List of rule descriptions
+        """
+        rules = []
+        for field_name, field_rules in self.validation_rules.items():
+            for rule in field_rules:
+                rules.append(f"{field_name}: {rule}")
+        return rules
     
     def validate(self, df: DataFrame) -> ValidationResult:
         """
@@ -146,19 +159,20 @@ class FieldValidator(BaseValidator):
                         error_count=error_count
                     )
         
-        # Calculate valid records (records with no errors)
+        # Calculate invalid records (records with errors)
         if errors:
             # This is an approximation - in reality, some records may have multiple errors
             total_errors = sum(e["error_count"] for e in errors)
-            valid_records = max(0, total_records - total_errors)
+            invalid_records = min(total_errors, total_records)
+        else:
+            invalid_records = 0
         
         is_valid = len(errors) == 0
         
         result = ValidationResult(
             is_valid=is_valid,
             total_records=total_records,
-            valid_records=valid_records,
-            invalid_records=total_records - valid_records,
+            invalid_records=invalid_records,
             errors=errors,
             warnings=warnings
         )

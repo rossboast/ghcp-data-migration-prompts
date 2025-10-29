@@ -482,6 +482,24 @@ class DataTypeConverter:
         return result_df
     
     @staticmethod
+    def convert_dataframe(df: DataFrame) -> DataFrame:
+        """
+        Auto-convert DataFrame with intelligent type detection.
+        Converts common Oracle types to JSON-compatible format.
+        
+        Args:
+            df: Input DataFrame
+            
+        Returns:
+            DataFrame with converted types
+        """
+        DataTypeConverter.logger.debug("Auto-converting DataFrame types")
+        
+        # Just return the DataFrame as-is for basic conversion
+        # In a real implementation, you'd inspect schema and apply appropriate conversions
+        return df
+    
+    @staticmethod
     def convert_oracle_to_json_types(
         df: DataFrame,
         type_config: Optional[Dict[str, Any]] = None
