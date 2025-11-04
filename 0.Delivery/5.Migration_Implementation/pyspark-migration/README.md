@@ -17,10 +17,14 @@ Production-grade framework for migrating Oracle HR database to Azure Cosmos DB u
 ### Prerequisites
 
 - **Python 3.9-3.12** (3.11 recommended)
-- **Java 8 or 11** (for PySpark)
+- **Java 8 or 11** (for PySpark) - or Java 17 for newer features
 - **Conda/Miniconda** (recommended for Windows)
 - Oracle JDBC driver (ojdbc8.jar)
 - Azure Cosmos DB account
+
+> **💡 Platform-Specific Setup Guides:**
+> - **Windows**: Follow instructions below
+> - **Linux/WSL**: See [docs/LINUX_SETUP.md](docs/LINUX_SETUP.md) - ✅ **No Hadoop/winutils issues!**
 
 ### Installation
 
@@ -40,21 +44,37 @@ Copy-Item .env.example .env
 
 See [CONDA_SETUP.md](CONDA_SETUP.md) for detailed instructions.
 
-#### Option 2: pip with venv
+#### Option 2: pip with venv (Windows)
 
-```bash
+```powershell
 # Requires Python 3.9-3.12 (NOT 3.13)
 python -m venv venv
-source venv/bin/activate  # On Windows: .\venv\Scripts\Activate.ps1
+.\venv\Scripts\Activate.ps1
 
 pip install -r requirements.txt
 
 # Configure environment
-cp .env.example .env
+Copy-Item .env.example .env
 # Edit .env with your credentials
 ```
 
 **Note:** On Windows with Python 3.13, use conda to avoid compilation issues.
+
+#### Option 3: pip with venv (Linux/WSL)
+
+```bash
+# Requires Python 3.11+
+python3.11 -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt
+
+# Use Linux-specific environment config
+cp .env.linux .env
+# Edit .env with your credentials
+```
+
+See [docs/LINUX_SETUP.md](docs/LINUX_SETUP.md) for complete Linux/WSL setup guide.
 
 ### Basic Usage
 
@@ -223,16 +243,49 @@ Automatic tracking of:
 
 ## 🧪 Testing
 
+### Unit Tests
+
 ```bash
-# Run all tests
-pytest tests/ -v
+# Run all unit tests (67 tests)
+pytest tests/unit/ -v
 
 # Run with coverage
-pytest tests/ --cov=. --cov-report=html
+pytest tests/unit/ --cov=. --cov-report=html
 
 # Run specific test file
-pytest tests/test_transformers.py -v
+pytest tests/unit/test_transformers.py -v
 ```
+
+**Expected Results:** 67 tests passing in ~5-10 minutes
+
+### Integration Tests
+
+Integration tests use Docker Oracle container for end-to-end testing.
+
+**Windows:**
+```powershell
+# Using helper script
+.\run-integration-tests.ps1
+
+# Or manually
+$env:USE_DOCKER_ORACLE = "true"
+pytest tests/integration/ -v
+```
+
+**Linux/WSL:**
+```bash
+# Using helper script
+chmod +x run-integration-tests.sh
+./run-integration-tests.sh
+
+# Or manually
+export USE_DOCKER_ORACLE=true
+pytest tests/integration/ -v
+```
+
+**Expected Results:** 19 tests passing in ~2-5 minutes (first run), ~30-60 seconds (subsequent runs)
+
+**Note:** Integration tests on Windows require [HADOOP_HOME setup](docs/LINUX_SETUP.md#advantages-of-linuxwsl). Consider using Linux/WSL for easier setup.
 
 ## 🎯 Use Cases
 

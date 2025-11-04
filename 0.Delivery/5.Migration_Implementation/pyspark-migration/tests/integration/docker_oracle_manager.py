@@ -192,6 +192,42 @@ class DockerOracleManager:
         print(f"Waiting for Oracle to become ready (timeout: {timeout}s)...")
         start_time = time.time()
         
+        # Check if container has health check configured
+        try:
+            health_check_result = subprocess.run(
+                ["docker", "inspect", "--format", "{{.State.Health}}", self.container_name],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            health_output = health_check_result.stdout.strip()
+            has_health_check = health_output not in ["<nil>", "<no value>", ""]
+        except:
+            has_health_check = False
+        
+        # If no health check, verify container is running
+        if not has_health_check:
+            print("Container has no health check, verifying it's running...")
+            try:
+                running_result = subprocess.run(
+                    ["docker", "inspect", "--format", "{{.State.Running}}", self.container_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if running_result.stdout.strip() == "true":
+                    print(f"✓ Container is running (no health check configured)")
+                    # Give it a few seconds to fully start
+                    time.sleep(5)
+                    return True
+                else:
+                    print(f"✗ Container is not running")
+                    return False
+            except:
+                print(f"✗ Failed to check container status")
+                return False
+        
+        # Container has health check, wait for it
         while time.time() - start_time < timeout:
             try:
                 result = subprocess.run(

@@ -27,7 +27,15 @@ Environment Variables:
 
 import pytest
 import os
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
+
+# Add parent directory to Python path for imports
+# This allows importing from extractors, loaders, etc.
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from extractors.oracle_extractor import OracleExtractor
 from loaders.cosmos_loader import CosmosLoader
