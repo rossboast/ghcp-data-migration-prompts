@@ -1,18 +1,6 @@
-
-You are the lead architect on a project that involves migrating an existing database onto a new Azure data platform.
+I want you to write a reusable prompt file for orchestrating a phased approach for migrating existing data feeds to a new Azure data platform. Use the following as the basis for the prompt and ask clarifying questions for anything you think we may have missed:
 
 The data migration project will be orchestrated using GitHub Copilot.
-
-Produce a set of reusable GitHub prompts which can be used as a framework for implementing a phased approach to a data migration.
-
-**Terminology**
-
-- **Source Database**: The existing database from which data will be migrated.
-- **Target Database**: The new database to which data will be migrated (e.g. Azure CosmosDB).
-- **Data Feed**: A pipeline or process through which data is ingested into the database.
-- **ETL**: Extract, Transform, Load - the process of moving data from one system to another, while transforming it along the way. This may be referenced to as 'transformation'
-- **DataSets** :  Refers to a one or more tables within a source database which are logically grouped/related.
-- **Schema** : Refers to a container of tables; a database can have multiple schemas.
 
 **Overarching Prompt Guidelines**
 
@@ -52,7 +40,7 @@ There should be prompts for:
     4. Break down the implementation plan into smaller tasks and goals, however, keep the whole plan and technical design in mind to reduce the risk of rework later. These tasks should be written sequentially in the order they will be implemented.
     5. The implementation plan represents the specification and contract for the migration and the implementation artifacts. Make sure this plan is updated when any changes are requested or new features are added. **This must stay in step with the implementation artifacts**. Document this plan in a file called 'migration-implementation-plan.md'.
     6. When there are options or trade-offs, prompt the user for a decision and don't proceed to the next phase until the user has made a choice for every option.
-5. **Phase 5 - Migration Implementation** - This phase will use the migration implementation plan to produce a set of implementation tasks to fulfil the requirements and perform the database migration. This phase should also include test scripts to validate that the data has been migrated correctly. Finally, any data transformations should be consistent with how existing applications consume the data.
+5. **Phase 5 - Migration Implementation** - This phase will use the migration implementation plan to produce a set of implementation tasks to furfil the requirements and perform the database migration. This phase should also include test scripts to validate that the data has been migrated correctly. Finally, any data transformations should be consistent with how existing applications consume the data.
     1. Create a folder in the workspace root called '5.Migration_Implementation' under '0.Delivery' which will contain all the migration scripts and test scripts for migrating the data feeds to Azure CosmosDB. Each artifact should be stored in its own subfolder for clarity. 
     2. Keep a track of tasks in a file called 'tasks.md'. Implement tasks in order by default, unless prompted otherwise.
     3. Produce implementation assets, such as PySpark scripts, that implement consistent validation and transformation. The assets should be modular and reusable for migrating additional tables or schemas from the source database in the future. Make sure you install all the dependencies required.
